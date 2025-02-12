@@ -25,6 +25,7 @@ func main() {
 
 func playHandler(w http.ResponseWriter, r *http.Request) {
 	videoURL := r.URL.Query().Get("video")
+	videoBaseName := filepath.Base(videoURL)
 	fmt.Println("videoURL:", videoURL)
 	subtitleURL := r.URL.Query().Get("subtitle")
 	fmt.Println("subtitleURL", subtitleURL)
@@ -81,6 +82,10 @@ func playHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 设置 CORS 头部
+	w.Header().Set("Access-Control-Allow-Origin", "*") // 允许所有源
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("正在播放视频..."))
+	w.Write([]byte(fmt.Sprintf("正在播放视频: %s", videoBaseName)))
 }
