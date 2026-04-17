@@ -43,7 +43,7 @@ build() {
     -ldflags="${LDFLAGS}" \
     ${EXTRA_FLAGS} \
     -o "build/${EXPORTNAME}_${OS}_${ARCH}${SUFFIX}" \
-    main.go
+    .
 
   # 为类Unix系统添加执行权限
   if [ "$OS" != "windows" ]; then
@@ -78,7 +78,7 @@ case "$1" in
 *)
   echo "用法: $0 {darwin-amd64|darwin-arm64|all|clean}"
   echo "示例:"
-  echo "  $0 darwin-amd64   # 仅编译 Linux AMD64 版本"
+  echo "  $0 darwin-amd64   # 仅编译 macOS AMD64 版本"
   echo "  $0 darwin-arm64   # 仅编译 macOS ARM64 版本"
   echo "  $0 all            # 编译所有版本"
   echo "  $0 clean          # 清理所有编译文件"
