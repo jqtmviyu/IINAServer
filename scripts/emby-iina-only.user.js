@@ -24,7 +24,7 @@
     const config = {
         localServer: 'http://127.0.0.1:8080',
         reviewOnly: false,
-        dryRunUpload: true,
+        dryRunUpload: false,
         debugMediaURL: '',
         debugSubtitleURL: '',
         dedupeWindowMs: 2500,

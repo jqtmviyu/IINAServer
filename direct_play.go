@@ -60,7 +60,7 @@ func newDirectPlayHandler(cfg config.Config, store *review.Store, sessions *sess
 			"playerMode": map[bool]string{true: "reused", false: "launched"}[reused],
 		})
 		store.SetStatus(sessionID, "launching")
-		reporter := progress.NewReporter(store, plan, cfg.ProgressInterval)
+		reporter := progress.NewReporter(store, plan, cfg.DeviceName, &http.Client{Timeout: cfg.HTTPTimeout}, cfg.ProgressInterval)
 
 		go observeSession(sessionCtx, store, sessions, sessionID, result.SocketPath, subtitleFile, cfg.PollInterval, reporter)
 
