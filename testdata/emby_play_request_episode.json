@@ -1,0 +1,47 @@
+{
+  "ApiClient": {
+    "_serverAddress": "http://127.0.0.1:8096",
+    "_serverVersion": "4.8.1.0",
+    "_deviceId": "device-123"
+  },
+  "playbackUrl": "http://127.0.0.1:8096/emby/Items/item123/PlaybackInfo?X-Emby-Device-Id=device-123&StartTimeTicks=450000000&X-Emby-Token=token-abc&UserId=user-1&IsPlayback=true&MediaSourceId=ms-1&SubtitleStreamIndex=2",
+  "playbackData": {
+    "PlaySessionId": "play-456",
+    "MediaSources": [
+      {
+        "Id": "ms-1",
+        "Name": "Main",
+        "Path": "/srv/media/Series/Show/S01E01.mkv",
+        "Container": "mkv",
+        "RunTimeTicks": 18000000000,
+        "MediaStreams": [
+          {
+            "Index": 2,
+            "Type": "Subtitle",
+            "IsExternal": true,
+            "Codec": "ass",
+            "DeliveryUrl": "/emby/videos/item123/ms-1/Subtitles/2/0/Stream.ass?api_key=token-abc",
+            "DisplayTitle": "Chinese ASS"
+          }
+        ]
+      }
+    ]
+  },
+  "request": {
+    "headers": {
+      "User-Agent": "Mozilla/5.0",
+      "X-Test": "1"
+    }
+  },
+  "extraData": {
+    "mainEpInfo": {
+      "Name": "Pilot",
+      "SeriesName": "Demo Show",
+      "SeasonId": "season-1",
+      "ParentIndexNumber": 1,
+      "IndexNumber": 1,
+      "Path": "/srv/media/Series/Show/S01E01.mkv"
+    }
+  },
+  "mountDiskEnable": "false"
+}

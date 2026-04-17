@@ -3,6 +3,8 @@
 # 创建 build 目录（如果不存在）
 mkdir -p build
 
+EXPORTNAME=IINAServer
+
 # 编译优化参数
 LDFLAGS="-s -w"         # -s: 去掉符号表 -w: 去掉调试信息
 EXTRA_FLAGS="-trimpath" # 移除编译路径信息
@@ -11,7 +13,7 @@ EXTRA_FLAGS="-trimpath" # 移除编译路径信息
 clean() {
   local OS=$1
   local ARCH=$2
-  local TARGET="build/IINAServer${OS}_${ARCH}"
+  local TARGET="build/${EXPORTNAME}_${OS}_${ARCH}"
 
   if [ "$OS" = "windows" ]; then
     TARGET="${TARGET}.exe"
@@ -40,19 +42,19 @@ build() {
   GOOS=$OS GOARCH=$ARCH go build \
     -ldflags="${LDFLAGS}" \
     ${EXTRA_FLAGS} \
-    -o "build/IINAServer${OS}_${ARCH}${SUFFIX}" \
+    -o "build/${EXPORTNAME}_${OS}_${ARCH}${SUFFIX}" \
     main.go
 
   # 为类Unix系统添加执行权限
   if [ "$OS" != "windows" ]; then
-    chmod +x "build/IINAServer${OS}_${ARCH}"
+    chmod +x "build/IINAServer_${OS}_${ARCH}"
   fi
 }
 
 # 清理所有
 clean_all() {
   echo "清理所有旧文件..."
-  rm -f build/IINAServer*
+  rm -f build/${EXPORTNAME}*
 }
 
 # 根据参数执行编译
