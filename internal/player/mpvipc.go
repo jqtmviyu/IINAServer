@@ -81,6 +81,9 @@ func (c *IPCClient) Observe(ctx context.Context, opts ObserveOptions) error {
 			if opts.StopOnIPCExit && isIPCStoppedError(err) {
 				return nil
 			}
+			if isIdleStopError(c, err) {
+				return nil
+			}
 			return err
 		}
 		select {
@@ -170,6 +173,21 @@ func isIPCStoppedError(err error) bool {
 		}
 	}
 	return strings.Contains(err.Error(), "connect: connection refused") || strings.Contains(err.Error(), "no such file or directory")
+}
+
+func isIdleStopError(client *IPCClient, err error) bool {
+	if client == nil {
+		return false
+	}
+	idle, idleErr := client.IdleActive()
+	return isIdleStopErrorResult(err, idle, idleErr)
+}
+
+func isIdleStopErrorResult(err error, idle bool, idleErr error) bool {
+	if err == nil || !strings.Contains(err.Error(), "property missing") {
+		return false
+	}
+	return idleErr == nil && idle
 }
 
 func (c *IPCClient) getFloat(name string) (float64, error) {
