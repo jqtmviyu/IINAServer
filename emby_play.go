@@ -141,6 +141,7 @@ func launchOrReusePlan(ctx context.Context, cfg config.Config, sessionID string,
 }
 
 func reuseExistingPlayer(ctx context.Context, cfg config.Config, plan model.PlayPlan, sessions *session.Manager) (bool, *player.LaunchResult, error) {
+	_ = cfg
 	inst := sessions.CurrentPlayer()
 	if inst == nil || strings.TrimSpace(inst.SocketPath) == "" {
 		return false, nil, fmt.Errorf("no reusable player")
@@ -165,6 +166,9 @@ func reuseExistingPlayer(ctx context.Context, cfg config.Config, plan model.Play
 		return false, nil, err
 	}
 	if plan.StartSeconds > 0 {
+		if err := waitForSeekableMedia(ctx, client); err != nil {
+			return false, nil, err
+		}
 		if err := client.SeekAbsolute(plan.StartSeconds); err != nil {
 			return false, nil, err
 		}
@@ -204,6 +208,30 @@ func waitForReusableWindow(ctx context.Context, client *player.IPCClient) error 
 			if windowErr == nil && windowID > 0 {
 				return nil
 			}
+			lastErr = err
+		}
+		select {
+		case <-waitCtx.Done():
+			return lastErr
+		case <-ticker.C:
+		}
+	}
+}
+
+func waitForSeekableMedia(ctx context.Context, client *player.IPCClient) error {
+	waitCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	ticker := time.NewTicker(200 * time.Millisecond)
+	defer ticker.Stop()
+	lastErr := fmt.Errorf("media not seekable")
+	for {
+		seekable, err := client.Seekable()
+		if err == nil {
+			if seekable {
+				return nil
+			}
+			lastErr = fmt.Errorf("media not seekable")
+		} else {
 			lastErr = err
 		}
 		select {

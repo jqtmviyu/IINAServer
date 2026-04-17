@@ -152,6 +152,10 @@ func (c *IPCClient) IdleActive() (bool, error) {
 	return c.getBool("idle-active")
 }
 
+func (c *IPCClient) Seekable() (bool, error) {
+	return c.getBool("seekable")
+}
+
 func isIPCStoppedError(err error) bool {
 	if err == nil {
 		return false
@@ -229,28 +233,67 @@ func (c *IPCClient) getString(name string) (string, error) {
 func (c *IPCClient) call(command []any) (ipcResponse, error) {
 	conn, err := net.DialTimeout("unix", c.socketPath, 2*time.Second)
 	if err != nil {
+		logIPCFailure(c.socketPath, command, err)
 		return ipcResponse{}, err
 	}
 	defer conn.Close()
 	_ = conn.SetDeadline(time.Now().Add(2 * time.Second))
 	payload, err := json.Marshal(ipcCommand{Command: command})
 	if err != nil {
+		logIPCFailure(c.socketPath, command, err)
 		return ipcResponse{}, err
 	}
 	payload = append(payload, '\n')
 	if _, err = conn.Write(payload); err != nil {
+		logIPCFailure(c.socketPath, command, err)
 		return ipcResponse{}, err
 	}
 	line, err := bufio.NewReader(conn).ReadBytes('\n')
 	if err != nil {
+		logIPCFailure(c.socketPath, command, err)
 		return ipcResponse{}, err
 	}
 	var resp ipcResponse
 	if err = json.Unmarshal(line, &resp); err != nil {
+		logIPCFailure(c.socketPath, command, err)
 		return ipcResponse{}, err
 	}
 	if resp.Error != "" && resp.Error != "success" {
-		return ipcResponse{}, fmt.Errorf("ipc error: %s", resp.Error)
+		err = fmt.Errorf("ipc error: %s", resp.Error)
+		logIPCFailure(c.socketPath, command, err)
+		return ipcResponse{}, err
 	}
 	return resp, nil
+}
+
+func logIPCFailure(socketPath string, command []any, err error) {
+	fmt.Printf("event=ipc.command.fail socket_path=%q ipc_command=%q ipc_args=%q err=%q\n", socketPath, commandName(command), commandArgsSummary(command), err)
+}
+
+func commandName(command []any) string {
+	if len(command) == 0 {
+		return ""
+	}
+	name, _ := command[0].(string)
+	return name
+}
+
+func commandArgsSummary(command []any) string {
+	if len(command) <= 1 {
+		return ""
+	}
+	parts := make([]string, 0, len(command)-1)
+	for _, arg := range command[1:] {
+		switch typed := arg.(type) {
+		case string:
+			value := typed
+			if len(value) > 120 {
+				value = value[:117] + "..."
+			}
+			parts = append(parts, value)
+		default:
+			parts = append(parts, fmt.Sprintf("%v", typed))
+		}
+	}
+	return strings.Join(parts, " | ")
 }
