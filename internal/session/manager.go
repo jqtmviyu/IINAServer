@@ -13,9 +13,17 @@ type ActiveSession struct {
 	SessionID string
 }
 
+type PlayerInstance struct {
+	Args       []string
+	Cancel     context.CancelFunc
+	PID        int
+	SocketPath string
+}
+
 type Manager struct {
 	mu     sync.Mutex
 	active *ActiveSession
+	player *PlayerInstance
 }
 
 func NewManager() *Manager {
@@ -51,4 +59,22 @@ func (m *Manager) ClearIfCurrent(sessionID string) {
 	if m.active != nil && m.active.SessionID == sessionID {
 		m.active = nil
 	}
+}
+
+func (m *Manager) CurrentPlayer() *PlayerInstance {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.player
+}
+
+func (m *Manager) SetPlayer(next *PlayerInstance) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.player = next
+}
+
+func (m *Manager) ClearPlayer() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.player = nil
 }

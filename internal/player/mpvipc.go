@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/jqtmviyu/iinaServer/internal/model"
@@ -107,6 +108,50 @@ func (c *IPCClient) ReadSample() (model.ProgressSample, error) {
 	}, nil
 }
 
+func (c *IPCClient) Command(command ...any) error {
+	_, err := c.call(command)
+	return err
+}
+
+func (c *IPCClient) LoadFile(mediaURL string) error {
+	return c.Command("loadfile", mediaURL, "replace")
+}
+
+func (c *IPCClient) SetProperty(name string, value any) error {
+	return c.Command("set_property", name, value)
+}
+
+func (c *IPCClient) SeekAbsolute(seconds int) error {
+	return c.Command("seek", seconds, "absolute+exact")
+}
+
+func (c *IPCClient) StopPlayback() error {
+	return c.Command("stop")
+}
+
+func (c *IPCClient) AddSubtitle(path string) error {
+	if strings.TrimSpace(path) == "" {
+		return nil
+	}
+	return c.Command("sub-add", path, "select")
+}
+
+func (c *IPCClient) Quit() error {
+	return c.Command("quit")
+}
+
+func (c *IPCClient) WindowConfigured() (bool, error) {
+	return c.getBool("vo-configured")
+}
+
+func (c *IPCClient) WindowID() (int64, error) {
+	return c.getInt("window-id")
+}
+
+func (c *IPCClient) IdleActive() (bool, error) {
+	return c.getBool("idle-active")
+}
+
 func isIPCStoppedError(err error) bool {
 	if err == nil {
 		return false
@@ -120,7 +165,7 @@ func isIPCStoppedError(err error) bool {
 			return true
 		}
 	}
-	return err.Error() == "ipc error: property unavailable"
+	return strings.Contains(err.Error(), "connect: connection refused") || strings.Contains(err.Error(), "no such file or directory")
 }
 
 func (c *IPCClient) getFloat(name string) (float64, error) {
@@ -137,6 +182,25 @@ func (c *IPCClient) getFloat(name string) (float64, error) {
 		return 0, errors.New("property missing")
 	default:
 		return 0, fmt.Errorf("unexpected float type %T", val)
+	}
+}
+
+func (c *IPCClient) getInt(name string) (int64, error) {
+	resp, err := c.call([]any{"get_property", name})
+	if err != nil {
+		return 0, err
+	}
+	switch val := resp.Data.(type) {
+	case float64:
+		return int64(val), nil
+	case int:
+		return int64(val), nil
+	case int64:
+		return val, nil
+	case nil:
+		return 0, errors.New("property missing")
+	default:
+		return 0, fmt.Errorf("unexpected int type %T", val)
 	}
 }
 

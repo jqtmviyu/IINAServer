@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         emby-iina-only
-// @name:zh-CN   emby-iina-only
-// @name:en      emby-iina-only
+// @name         emby-iina
+// @name:zh-CN   emby-iina
+// @name:en      emby-iina
 // @namespace    https://github.com/jqtmviyu/iinaServer
 // @version      2026.04.17
 // @description  Emby Web 调用本地 IINAServer，仅支持 IINA。
@@ -53,7 +53,7 @@
 
     function log(...args) {
         if (config.debug) {
-            console.log('[emby-iina-only]', ...args);
+            console.log('[emby-iina]', ...args);
         }
     }
 
@@ -323,7 +323,7 @@
             return;
         }
         state.lastNoticeAt = now();
-        console.warn('[emby-iina-only]', message);
+        console.warn('[emby-iina]', message);
         const doc = pageWindow.document;
         if (!doc || !doc.body) {
             return;

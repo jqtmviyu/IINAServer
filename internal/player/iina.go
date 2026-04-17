@@ -12,6 +12,8 @@ import (
 	"github.com/jqtmviyu/iinaServer/internal/config"
 )
 
+const sharedSocketName = "iinaserver-primary.sock"
+
 type LaunchOptions struct {
 	MediaURL     string
 	SubtitleFile string
@@ -27,12 +29,16 @@ type LaunchResult struct {
 	PID        int
 }
 
+func SharedSocketPath(cfg config.Config) string {
+	return filepath.Join(cfg.IPCDir, sharedSocketName)
+}
+
 func LaunchIINA(ctx context.Context, cfg config.Config, opt LaunchOptions) (*LaunchResult, error) {
 	bin, err := resolveIINABin(cfg.IINABin)
 	if err != nil {
 		return nil, err
 	}
-	socketPath := filepath.Join(cfg.IPCDir, fmt.Sprintf("iinaserver-%s.sock", opt.SessionID))
+	socketPath := SharedSocketPath(cfg)
 	_ = os.Remove(socketPath)
 	args := []string{bin, "--no-stdin", opt.MediaURL}
 	args = append(args, "--mpv-input-ipc-server="+socketPath)
@@ -55,6 +61,10 @@ func LaunchIINA(ctx context.Context, cfg config.Config, opt LaunchOptions) (*Lau
 		SocketPath: socketPath,
 		PID:        cmd.Process.Pid,
 	}, nil
+}
+
+func ActivateIINA() error {
+	return exec.Command("osascript", "-e", `if application "IINA" is running then tell application "IINA" to activate`).Run()
 }
 
 func resolveIINABin(configured string) (string, error) {
