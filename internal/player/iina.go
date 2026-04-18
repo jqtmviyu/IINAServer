@@ -68,16 +68,7 @@ func ActivateIINA() error {
 }
 
 func resolveIINABin(configured string) (string, error) {
-	candidates := []string{}
-	if strings.TrimSpace(configured) != "" {
-		candidates = append(candidates, strings.TrimSpace(configured))
-	}
-	candidates = append(candidates,
-		"/Users/nuc/.local/bin/iina-cli",
-		"/Applications/IINA.app/Contents/MacOS/iina-cli",
-		"iina-cli",
-		"iina",
-	)
+	candidates := iinaBinCandidates(configured)
 	for _, candidate := range candidates {
 		if candidate == "" {
 			continue
@@ -93,6 +84,22 @@ func resolveIINABin(configured string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("iina executable not found")
+}
+
+func iinaBinCandidates(configured string) []string {
+	candidates := []string{}
+	if strings.TrimSpace(configured) != "" {
+		candidates = append(candidates, strings.TrimSpace(configured))
+	}
+	if home, err := os.UserHomeDir(); err == nil && strings.TrimSpace(home) != "" {
+		candidates = append(candidates, filepath.Join(home, ".local", "bin", "iina-cli"))
+	}
+	candidates = append(candidates,
+		"/Applications/IINA.app/Contents/MacOS/iina-cli",
+		"iina-cli",
+		"iina",
+	)
+	return candidates
 }
 
 func WaitForFirstSample(ctx context.Context, socketPath string) error {
