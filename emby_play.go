@@ -69,8 +69,9 @@ func newEmbyPlayHandler(cfg config.Config, store *review.Store, sessions *sessio
 			httpapi.WriteError(w, http.StatusInternalServerError, "无法启动播放器")
 			return
 		}
-		store.SetLaunch(sessionID, result.Args, result.SocketPath, result.PID)
+		store.SetLaunch(sessionID, plan.Player, result.Args, result.SocketPath, result.PID)
 		store.SetMetadata(sessionID, map[string]any{
+			"player":           plan.Player,
 			"reviewOnly":       req.Options.ReviewOnly,
 			"dryRunUpload":     plan.DryRunUpload,
 			"debugMediaURL":    plan.DebugMediaURL,
@@ -116,8 +117,12 @@ func launchOrReusePlan(ctx context.Context, cfg config.Config, sessionID string,
 		return result, subtitleFile, true, nil
 	}
 
+	playerType := plan.Player
+	if playerType == "" {
+		playerType = model.PlayerIINA
+	}
 	playerCtx, playerCancel := context.WithCancel(context.Background())
-	result, err := player.LaunchIINA(playerCtx, cfg, player.LaunchOptions{
+	result, err := launchPlayer(playerCtx, cfg, playerType, player.LaunchOptions{
 		MediaURL:     plan.EffectiveMediaURL,
 		SubtitleFile: subtitleInputOrFile(plan, subtitleFile),
 		StartSeconds: plan.StartSeconds,
@@ -131,19 +136,44 @@ func launchOrReusePlan(ctx context.Context, cfg config.Config, sessionID string,
 		}
 		return nil, "", false, err
 	}
+	if prev := sessions.CurrentPlayer(); prev != nil && prev.Player != playerType {
+		_ = player.NewIPCClient(prev.SocketPath, 2*time.Second).Quit()
+		if prev.Cancel != nil {
+			prev.Cancel()
+		}
+	}
 	sessions.SetPlayer(&session.PlayerInstance{
+		Player:     playerType,
 		Args:       append([]string(nil), result.Args...),
 		Cancel:     playerCancel,
 		PID:        result.PID,
 		SocketPath: result.SocketPath,
 	})
+	if playerType == model.PlayerMPV {
+		go waitForPlayerExit(result, sessions)
+	}
 	return result, subtitleFile, false, nil
+}
+
+func launchPlayer(ctx context.Context, cfg config.Config, playerType string, opt player.LaunchOptions) (*player.LaunchResult, error) {
+	switch playerType {
+	case model.PlayerIINA:
+		return player.LaunchIINA(ctx, cfg, opt)
+	case model.PlayerMPV:
+		return player.LaunchMPV(ctx, cfg, opt)
+	default:
+		return nil, fmt.Errorf("unsupported player: %s", playerType)
+	}
 }
 
 func reuseExistingPlayer(ctx context.Context, cfg config.Config, plan model.PlayPlan, sessions *session.Manager) (bool, *player.LaunchResult, error) {
 	_ = cfg
 	inst := sessions.CurrentPlayer()
-	if inst == nil || strings.TrimSpace(inst.SocketPath) == "" {
+	playerType := plan.Player
+	if playerType == "" {
+		playerType = model.PlayerIINA
+	}
+	if inst == nil || inst.Player != playerType || strings.TrimSpace(inst.SocketPath) == "" {
 		return false, nil, fmt.Errorf("no reusable player")
 	}
 	client := player.NewIPCClient(inst.SocketPath, 2*time.Second)
@@ -180,8 +210,10 @@ func reuseExistingPlayer(ctx context.Context, cfg config.Config, plan model.Play
 		cleanupBrokenPlayer(client, sessions)
 		return false, nil, err
 	}
-	if err := player.ActivateIINA(); err != nil {
-		fmt.Println("activate iina:", err)
+	if playerType == model.PlayerIINA {
+		if err := player.ActivateIINA(); err != nil {
+			fmt.Println("activate iina:", err)
+		}
 	}
 	return true, &player.LaunchResult{
 		Args:       append([]string(nil), inst.Args...),
@@ -254,10 +286,7 @@ func waitForPlayerExit(result *player.LaunchResult, sessions *session.Manager) {
 		return
 	}
 	_ = result.Cmd.Wait()
-	current := sessions.CurrentPlayer()
-	if current != nil && current.SocketPath == result.SocketPath {
-		sessions.ClearPlayer()
-	}
+	sessions.ClearPlayerIfPID(result.PID)
 	_ = os.Remove(result.SocketPath)
 }
 

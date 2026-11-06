@@ -14,6 +14,7 @@ type ActiveSession struct {
 }
 
 type PlayerInstance struct {
+	Player     string
 	Args       []string
 	Cancel     context.CancelFunc
 	PID        int
@@ -77,4 +78,12 @@ func (m *Manager) ClearPlayer() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.player = nil
+}
+
+func (m *Manager) ClearPlayerIfPID(pid int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.player != nil && m.player.PID == pid {
+		m.player = nil
+	}
 }

@@ -35,8 +35,6 @@ func newStopHandler(store *review.Store, sessions *session.Manager) httpapi.Stop
 				store.AddError(current.SessionID, err.Error())
 				httpapi.WriteError(w, http.StatusInternalServerError, "无法停止播放器")
 				return
-			} else {
-				sessions.ClearPlayer()
 			}
 		}
 		sessions.StopCurrent()

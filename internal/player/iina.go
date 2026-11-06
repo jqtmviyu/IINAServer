@@ -38,6 +38,9 @@ func LaunchIINA(ctx context.Context, cfg config.Config, opt LaunchOptions) (*Lau
 	if err != nil {
 		return nil, err
 	}
+	if err := ensureIPCDir(cfg.IPCDir); err != nil {
+		return nil, err
+	}
 	socketPath := SharedSocketPath(cfg)
 	_ = os.Remove(socketPath)
 	args := []string{bin, "--no-stdin", opt.MediaURL}

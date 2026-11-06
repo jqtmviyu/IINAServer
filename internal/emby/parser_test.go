@@ -10,18 +10,13 @@ import (
 )
 
 func TestParsePlayRequest(t *testing.T) {
-	path := filepath.Join("..", "..", "testdata", "emby_play_request_episode.json")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read testdata: %v", err)
-	}
-	var req model.EmbyPlayRequest
-	if err := json.Unmarshal(data, &req); err != nil {
-		t.Fatalf("unmarshal testdata: %v", err)
-	}
+	req := loadTestRequest(t)
 	plan, err := ParsePlayRequest(req, true)
 	if err != nil {
 		t.Fatalf("ParsePlayRequest error: %v", err)
+	}
+	if plan.Player != model.PlayerIINA {
+		t.Fatalf("unexpected default player: %s", plan.Player)
 	}
 	if plan.ItemID != "item123" {
 		t.Fatalf("unexpected item id: %s", plan.ItemID)
@@ -43,4 +38,54 @@ func TestParsePlayRequest(t *testing.T) {
 	if plan.MediaTitle != "Demo Show S1:E1 - Pilot  |  S01E01.mkv" {
 		t.Fatalf("unexpected media title: %s", plan.MediaTitle)
 	}
+}
+
+func TestParsePlayRequestSelectsMPV(t *testing.T) {
+	req := loadTestRequest(t)
+	req.Options.Player = model.PlayerMPV
+	plan, err := ParsePlayRequest(req, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Player != model.PlayerMPV {
+		t.Fatalf("unexpected player: %s", plan.Player)
+	}
+}
+
+func TestParsePlayRequestRejectsUnsupportedPlayer(t *testing.T) {
+	req := loadTestRequest(t)
+	req.Options.Player = "vlc"
+	if _, err := ParsePlayRequest(req, true); err == nil {
+		t.Fatal("expected unsupported player error")
+	}
+}
+
+func TestParsePlayRequestRejectsNonHTTPMediaURL(t *testing.T) {
+	req := loadTestRequest(t)
+	req.Options.DebugMediaURL = "file:///etc/passwd"
+	if _, err := ParsePlayRequest(req, true); err == nil {
+		t.Fatal("expected invalid debug media URL error")
+	}
+}
+
+func TestParsePlayRequestRejectsDifferentPlaybackHost(t *testing.T) {
+	req := loadTestRequest(t)
+	req.PlaybackURL = "http://attacker.example/emby/Items/item123/PlaybackInfo?X-Emby-Token=token-abc"
+	if _, err := ParsePlayRequest(req, true); err == nil {
+		t.Fatal("expected playback host mismatch error")
+	}
+}
+
+func loadTestRequest(t *testing.T) model.EmbyPlayRequest {
+	t.Helper()
+	path := filepath.Join("..", "..", "testdata", "emby_play_request_episode.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read testdata: %v", err)
+	}
+	var req model.EmbyPlayRequest
+	if err := json.Unmarshal(data, &req); err != nil {
+		t.Fatalf("unmarshal testdata: %v", err)
+	}
+	return req
 }

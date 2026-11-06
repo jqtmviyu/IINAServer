@@ -2,7 +2,9 @@ package httpapi
 
 import (
 	"encoding/json"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/jqtmviyu/iinaServer/internal/model"
@@ -21,18 +23,77 @@ type Handler struct {
 }
 
 func (h Handler) Register(mux *http.ServeMux) {
-	mux.HandleFunc("/healthz", h.Healthz)
-	mux.HandleFunc("/v1/review/sessions/latest", h.GetLatestReview)
-	mux.HandleFunc("/v1/review/sessions/", h.GetSessionReview)
+	mux.HandleFunc("/healthz", h.withLocalOrigin(h.Healthz, false))
+	mux.HandleFunc("/v1/review/sessions/latest", h.withLocalOrigin(h.GetLatestReview, false))
+	mux.HandleFunc("/v1/review/sessions/", h.withLocalOrigin(h.GetSessionReview, false))
 	if h.DirectPlay != nil {
-		mux.HandleFunc("/play", h.DirectPlay)
+		mux.HandleFunc("/play", h.withLocalOrigin(http.HandlerFunc(h.DirectPlay), true))
 	}
 	if h.EmbyPlay != nil {
-		mux.HandleFunc("/v1/emby/play", h.EmbyPlay)
+		mux.HandleFunc("/v1/emby/play", h.withLocalOrigin(http.HandlerFunc(h.EmbyPlay), true))
 	}
 	if h.Stop != nil {
-		mux.HandleFunc("/v1/session/stop", h.Stop)
+		mux.HandleFunc("/v1/session/stop", h.withLocalOrigin(http.HandlerFunc(h.Stop), true))
 	}
+}
+
+func (h Handler) withLocalOrigin(next http.HandlerFunc, control bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !isLoopbackHost(r.Host) {
+			http.Error(w, "local host required", http.StatusForbidden)
+			return
+		}
+		if origin := strings.TrimSpace(r.Header.Get("Origin")); origin != "" {
+			normalized, ok := normalizeOrigin(origin)
+			if !ok {
+				http.Error(w, "invalid origin", http.StatusForbidden)
+				return
+			}
+			w.Header().Set("Access-Control-Allow-Origin", normalized)
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+			if strings.EqualFold(r.Header.Get("Access-Control-Request-Private-Network"), "true") {
+				w.Header().Set("Access-Control-Allow-Private-Network", "true")
+			}
+			w.Header().Add("Vary", "Origin")
+		} else if control && isUntrustedBrowserRequest(r) {
+			http.Error(w, "browser origin required", http.StatusForbidden)
+			return
+		}
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next(w, r)
+	}
+}
+
+func isUntrustedBrowserRequest(r *http.Request) bool {
+	fetchSite := strings.ToLower(strings.TrimSpace(r.Header.Get("Sec-Fetch-Site")))
+	if fetchSite != "" && fetchSite != "none" && fetchSite != "same-origin" {
+		return true
+	}
+	return strings.TrimSpace(r.Referer()) != ""
+}
+
+func isLoopbackHost(hostPort string) bool {
+	host := hostPort
+	if parsedHost, _, err := net.SplitHostPort(hostPort); err == nil {
+		host = parsedHost
+	}
+	if strings.EqualFold(strings.Trim(host, "[]"), "localhost") {
+		return true
+	}
+	ip := net.ParseIP(strings.Trim(host, "[]"))
+	return ip != nil && ip.IsLoopback()
+}
+
+func normalizeOrigin(raw string) (string, bool) {
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Host == "" || (strings.ToLower(parsed.Scheme) != "http" && strings.ToLower(parsed.Scheme) != "https") || parsed.User != nil || (parsed.Path != "" && parsed.Path != "/") || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return "", false
+	}
+	return strings.ToLower(parsed.Scheme) + "://" + strings.ToLower(parsed.Host), true
 }
 
 func (h Handler) Healthz(w http.ResponseWriter, _ *http.Request) {
@@ -72,9 +133,6 @@ func (h Handler) GetSessionReview(w http.ResponseWriter, r *http.Request) {
 
 func writeJSON(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(data)
 }

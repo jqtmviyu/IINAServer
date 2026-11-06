@@ -1,6 +1,8 @@
 package review
 
 import (
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -71,11 +73,12 @@ func (s *Store) SetStatus(sessionID string, status string) {
 	}
 }
 
-func (s *Store) SetLaunch(sessionID string, args []string, socket string, pid int) {
+func (s *Store) SetLaunch(sessionID string, player string, args []string, socket string, pid int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if review, ok := s.byID[sessionID]; ok {
-		review.IINAArgs = append([]string(nil), args...)
+		review.PlayerArgs = append([]string(nil), args...)
+		review.Player = player
 		review.IPCSocket = socket
 		review.PID = pid
 		review.UpdatedAt = time.Now()
@@ -171,7 +174,7 @@ func cloneReview(in *model.SessionReview) model.SessionReview {
 		}
 		out.Plan = &plan
 	}
-	out.IINAArgs = append([]string(nil), in.IINAArgs...)
+	out.PlayerArgs = append([]string(nil), in.PlayerArgs...)
 	out.Samples = append([]model.ProgressSample(nil), in.Samples...)
 	out.Errors = append([]string(nil), in.Errors...)
 	out.Metadata = cloneAnyMap(in.Metadata)
@@ -185,7 +188,94 @@ func cloneReview(in *model.SessionReview) model.SessionReview {
 			out.Uploads = append(out.Uploads, clone)
 		}
 	}
+	redactReview(&out)
 	return out
+}
+
+func redactReview(review *model.SessionReview) {
+	secret := ""
+	if review.Plan != nil {
+		secret = review.Plan.APIKey
+	}
+	for i, err := range review.Errors {
+		review.Errors[i] = redactString(err, secret)
+	}
+	for i, arg := range review.PlayerArgs {
+		review.PlayerArgs[i] = redactURL(arg)
+	}
+	if review.Plan != nil {
+		plan := review.Plan
+		plan.APIKey = ""
+		plan.StreamURL = redactURL(plan.StreamURL)
+		plan.EffectiveMediaURL = redactURL(plan.EffectiveMediaURL)
+		plan.SubtitleURL = redactURL(plan.SubtitleURL)
+		plan.EffectiveSubtitle = redactURL(plan.EffectiveSubtitle)
+		plan.DebugMediaURL = redactURL(plan.DebugMediaURL)
+		plan.DebugSubtitleURL = redactURL(plan.DebugSubtitleURL)
+		redactHeaders(plan.RequestHeaders)
+	}
+	for i := range review.Uploads {
+		upload := &review.Uploads[i]
+		upload.URL = redactURL(upload.URL)
+		upload.Error = redactString(upload.Error, secret)
+		redactQuery(upload.Query)
+		redactHeaders(upload.Headers)
+	}
+	for _, key := range []string{"debugMediaURL", "debugSubtitleURL"} {
+		if value, ok := review.Metadata[key].(string); ok {
+			review.Metadata[key] = redactURL(value)
+		}
+	}
+}
+
+func redactURL(raw string) string {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return raw
+	}
+	query := parsed.Query()
+	redactQueryValues(query)
+	parsed.RawQuery = query.Encode()
+	parsed.User = nil
+	return parsed.String()
+}
+
+func redactQuery(query map[string]string) {
+	for key := range query {
+		if isSecretKey(key) {
+			delete(query, key)
+		}
+	}
+}
+
+func redactQueryValues(query url.Values) {
+	for key := range query {
+		if isSecretKey(key) {
+			query.Del(key)
+		}
+	}
+}
+
+func redactHeaders(headers map[string]string) {
+	for key, value := range headers {
+		if isSecretKey(key) || strings.EqualFold(key, "Cookie") {
+			delete(headers, key)
+			continue
+		}
+		headers[key] = redactURL(value)
+	}
+}
+
+func redactString(value string, secret string) string {
+	if secret == "" {
+		return value
+	}
+	value = strings.ReplaceAll(value, secret, "[redacted]")
+	return strings.ReplaceAll(value, url.QueryEscape(secret), "[redacted]")
+}
+
+func isSecretKey(key string) bool {
+	return strings.EqualFold(key, "api_key") || strings.EqualFold(key, "X-Emby-Token") || strings.EqualFold(key, "Authorization")
 }
 
 func cloneStringMap(in map[string]string) map[string]string {

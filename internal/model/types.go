@@ -70,7 +70,13 @@ type Chapter struct {
 	StartPositionTicks int64  `json:"StartPositionTicks"`
 }
 
+const (
+	PlayerIINA = "iina"
+	PlayerMPV  = "mpv"
+)
+
 type PlayOptions struct {
+	Player           string `json:"player,omitempty"`
 	ReviewOnly       bool   `json:"reviewOnly"`
 	DryRunUpload     *bool  `json:"dryRunUpload,omitempty"`
 	DebugMediaURL    string `json:"debugMediaURL,omitempty"`
@@ -79,6 +85,7 @@ type PlayOptions struct {
 
 type PlayPlan struct {
 	SessionID         string            `json:"sessionId"`
+	Player            string            `json:"player,omitempty"`
 	Source            string            `json:"source"`
 	Scheme            string            `json:"scheme,omitempty"`
 	Netloc            string            `json:"netloc,omitempty"`
@@ -122,17 +129,18 @@ type UploadRecord struct {
 }
 
 type SessionReview struct {
-	SessionID string           `json:"sessionId"`
-	Source    string           `json:"source"`
-	Status    string           `json:"status"`
-	CreatedAt time.Time        `json:"createdAt"`
-	UpdatedAt time.Time        `json:"updatedAt"`
-	Plan      *PlayPlan        `json:"plan,omitempty"`
-	IINAArgs  []string         `json:"iinaArgs,omitempty"`
-	IPCSocket string           `json:"ipcSocket,omitempty"`
-	PID       int              `json:"pid,omitempty"`
-	Samples   []ProgressSample `json:"samples,omitempty"`
-	Uploads   []UploadRecord   `json:"uploads,omitempty"`
-	Errors    []string         `json:"errors,omitempty"`
-	Metadata  map[string]any   `json:"metadata,omitempty"`
+	SessionID  string           `json:"sessionId"`
+	Source     string           `json:"source"`
+	Player     string           `json:"player,omitempty"`
+	Status     string           `json:"status"`
+	CreatedAt  time.Time        `json:"createdAt"`
+	UpdatedAt  time.Time        `json:"updatedAt"`
+	Plan       *PlayPlan        `json:"plan,omitempty"`
+	PlayerArgs []string         `json:"playerArgs,omitempty"`
+	IPCSocket  string           `json:"ipcSocket,omitempty"`
+	PID        int              `json:"pid,omitempty"`
+	Samples    []ProgressSample `json:"samples,omitempty"`
+	Uploads    []UploadRecord   `json:"uploads,omitempty"`
+	Errors     []string         `json:"errors,omitempty"`
+	Metadata   map[string]any   `json:"metadata,omitempty"`
 }

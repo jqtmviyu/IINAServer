@@ -20,13 +20,28 @@ func ParsePlayRequest(req model.EmbyPlayRequest, defaultDryRun bool) (model.Play
 	if req.ApiClient.ServerAddress == "" {
 		return model.PlayPlan{}, fmt.Errorf("missing ApiClient._serverAddress")
 	}
-	playbackURL, err := url.Parse(req.PlaybackURL)
+	playbackURL, err := parseHTTPURL(req.PlaybackURL, "playbackUrl")
 	if err != nil {
-		return model.PlayPlan{}, fmt.Errorf("invalid playbackUrl: %w", err)
+		return model.PlayPlan{}, err
 	}
-	serverURL, err := url.Parse(req.ApiClient.ServerAddress)
+	serverURL, err := parseHTTPURL(req.ApiClient.ServerAddress, "ApiClient._serverAddress")
 	if err != nil {
-		return model.PlayPlan{}, fmt.Errorf("invalid ApiClient._serverAddress: %w", err)
+		return model.PlayPlan{}, err
+	}
+	playerType := strings.ToLower(strings.TrimSpace(req.Options.Player))
+	if playerType == "" {
+		playerType = model.PlayerIINA
+	}
+	if playerType != model.PlayerIINA && playerType != model.PlayerMPV {
+		return model.PlayPlan{}, fmt.Errorf("unsupported player: %s", playerType)
+	}
+	if req.Options.DebugMediaURL != "" {
+		if _, err := parseHTTPURL(req.Options.DebugMediaURL, "debugMediaURL"); err != nil {
+			return model.PlayPlan{}, err
+		}
+	}
+	if !strings.EqualFold(playbackURL.Scheme, serverURL.Scheme) || !strings.EqualFold(playbackURL.Host, serverURL.Host) {
+		return model.PlayPlan{}, fmt.Errorf("playbackUrl must use the configured Emby server")
 	}
 	if !strings.Contains(playbackURL.Path, "/emby/") {
 		return model.PlayPlan{}, fmt.Errorf("only emby playbackUrl supported")
@@ -77,6 +92,7 @@ func ParsePlayRequest(req model.EmbyPlayRequest, defaultDryRun bool) (model.Play
 	}
 	plan := model.PlayPlan{
 		Source:            "emby",
+		Player:            playerType,
 		Scheme:            serverURL.Scheme,
 		Netloc:            serverURL.Host,
 		ItemID:            itemID,
@@ -97,6 +113,18 @@ func ParsePlayRequest(req model.EmbyPlayRequest, defaultDryRun bool) (model.Play
 		RequestHeaders:    cloneHeaders(req.Request.Headers),
 	}
 	return plan, nil
+}
+
+func parseHTTPURL(raw string, field string) (*url.URL, error) {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return nil, fmt.Errorf("invalid %s: %w", field, err)
+	}
+	parsed.Scheme = strings.ToLower(parsed.Scheme)
+	if (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil {
+		return nil, fmt.Errorf("%s must be an absolute HTTP(S) URL", field)
+	}
+	return parsed, nil
 }
 
 func itemIDFromPath(path string) (string, error) {

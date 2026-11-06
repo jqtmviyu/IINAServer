@@ -3,15 +3,18 @@
 // @name:zh-CN   emby-iina
 // @name:en      emby-iina
 // @namespace    https://github.com/jqtmviyu/iinaServer
-// @version      2026.04.17
-// @description  Emby Web 调用本地 IINAServer，仅支持 IINA。
-// @description:zh-CN Emby Web 调用本地 IINAServer，仅支持 IINA。
-// @description:en  Forward Emby Web playback to local IINAServer for IINA only.
+// @version      2026.11.05
+// @description  Emby Web 调用本地 IINAServer，支持 IINA 和 MPV。
+// @description:zh-CN Emby Web 调用本地 IINAServer，支持 IINA 和 MPV。
+// @description:en  Forward Emby Web playback to local IINAServer for IINA or MPV.
 // @author       jqtmviyu
 // @match        *://*/web/*
 // @match        *://*/*/web/*
 // @match        https://app.emby.media/*
 // @grant        unsafeWindow
+// @grant        GM_getValue
+// @grant        GM_setValue
+// @grant        GM_registerMenuCommand
 // @run-at       document-start
 // @connect      127.0.0.1
 // @connect      localhost
@@ -43,6 +46,7 @@
     const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     const originFetch = pageWindow.fetch.bind(pageWindow);
     const state = {
+        player: loadSelectedPlayer(),
         lastPlayKey: '',
         lastPlayAt: 0,
         clickInFlight: false,
@@ -63,6 +67,36 @@
 
     function trimSlash(value) {
         return value.replace(/\/+$/, '');
+    }
+
+    function loadSelectedPlayer() {
+        try {
+            const value = typeof GM_getValue === 'function' ? GM_getValue('player', 'mpv') : 'mpv';
+            return value === 'iina' ? 'iina' : 'mpv';
+        } catch (_error) {
+            return 'mpv';
+        }
+    }
+
+    function playerLabel(player) {
+        return player === 'iina' ? 'IINA' : 'MPV';
+    }
+
+    function registerPlayerMenu() {
+        if (typeof GM_registerMenuCommand !== 'function') {
+            return;
+        }
+        GM_registerMenuCommand('切换播放器（IINA / MPV）', () => {
+            state.player = state.player === 'mpv' ? 'iina' : 'mpv';
+            try {
+                if (typeof GM_setValue === 'function') {
+                    GM_setValue('player', state.player);
+                }
+            } catch (_error) {
+                log('failed to save player setting');
+            }
+            showToast(`默认播放器已切换为 ${playerLabel(state.player)}；之后开始的播放会使用该播放器`);
+        });
     }
 
     function toURL(input) {
@@ -179,10 +213,11 @@
         return { playButton, item: null, itemId };
     }
 
-    function buildPlayKey(playbackURL, playbackData) {
+    function buildPlayKey(playbackURL, playbackData, selectedPlayer) {
         const playbackInfoURL = toURL(playbackURL);
         const mediaSourceId = playbackInfoURL?.searchParams.get('MediaSourceId') || '';
         return [
+            selectedPlayer,
             playbackURL,
             playbackData?.PlaySessionId || '',
             mediaSourceId,
@@ -193,8 +228,8 @@
         return state.lastPlayKey === playKey && now() - state.lastPlayAt < config.dedupeWindowMs;
     }
 
-    function rememberLocalPlay(playbackURL, playbackData) {
-        state.lastPlayKey = buildPlayKey(playbackURL, playbackData);
+    function rememberLocalPlay(playData) {
+        state.lastPlayKey = buildPlayKey(playData.playbackURL, playData.playbackData, playData.player);
         state.lastPlayAt = now();
         state.localPlaybackActive = true;
     }
@@ -311,6 +346,7 @@
 
     function buildPayload(playData) {
         const options = {
+            player: playData.player,
             reviewOnly: config.reviewOnly,
             dryRunUpload: config.dryRunUpload,
         };
@@ -343,7 +379,7 @@
         log('forward playback payload', payload);
         const response = await postJSON('/v1/emby/play', payload);
         if (response.status >= 200 && response.status < 300) {
-            rememberLocalPlay(playData.playbackURL, playData.playbackData);
+            rememberLocalPlay(playData);
             log('forward playback success', state.lastPlayKey, response.responseText);
             return;
         }
@@ -390,20 +426,24 @@
             if (!itemId) {
                 throw new Error('item id missing');
             }
+            const selectedPlayer = state.player;
             const playData = await buildPlayData(itemId);
-            const playKey = buildPlayKey(playData.playbackURL, playData.playbackData);
+            playData.player = selectedPlayer;
+            const playKey = buildPlayKey(playData.playbackURL, playData.playbackData, selectedPlayer);
             if (isDuplicatePlay(playKey) && state.localPlaybackActive) {
                 log('duplicate click play ignored', playKey);
                 return;
             }
             await handleLocalPlay(playData);
-            showToast('已调用 IINA · 已转交本地播放器处理');
+            showToast(`已调用 ${playerLabel(selectedPlayer)} · 已转交本地播放器处理`);
         } catch (error) {
             fallbackToNativePlay(context, error);
         } finally {
             state.clickInFlight = false;
         }
     }
+
+    registerPlayerMenu();
 
     pageWindow.document.addEventListener('click', function (event) {
         if (shouldPassThroughClick(event.target)) {

@@ -30,6 +30,7 @@ func newDirectPlayHandler(cfg config.Config, store *review.Store, sessions *sess
 		store.Create(sessionID, "direct-play")
 		plan := model.PlayPlan{
 			SessionID:         sessionID,
+			Player:            model.PlayerIINA,
 			Source:            "direct-play",
 			StreamURL:         videoURL,
 			EffectiveMediaURL: videoURL,
@@ -55,7 +56,7 @@ func newDirectPlayHandler(cfg config.Config, store *review.Store, sessions *sess
 			httpapi.WriteError(w, http.StatusInternalServerError, "无法启动播放器")
 			return
 		}
-		store.SetLaunch(sessionID, result.Args, result.SocketPath, result.PID)
+		store.SetLaunch(sessionID, plan.Player, result.Args, result.SocketPath, result.PID)
 		store.SetMetadata(sessionID, map[string]any{
 			"playerMode": map[bool]string{true: "reused", false: "launched"}[reused],
 		})
